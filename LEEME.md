@@ -6,6 +6,7 @@ Organizador semanal minimalista. Cada día te pregunta qué tienes, entiende lo 
 - «Práctica Docker: Dockerfile, compose y memoria antes del viernes 6h» → 3 subtareas, repartida en bloques hasta el viernes
 - «Estudiar examen 6h antes del viernes en bloques de 2h» / «Proyecto 4 horas en 4 sesiones» / «Leer 3h sin dividir»
 - «Gimnasio los lunes y miércoles a las 19»
+- «Clases de 6 a 15:30» · «Gym 16:30 a 19» · «Estudiar 20 a 22» (formato 24 h estricto: «de 1 a 3» es de madrugada, «de 13 a 15» es por la tarde; si pegas varias líneas, se crea un evento por línea)
 
 Funciona en ordenador, iPhone y Android, **con o sin conexión**. Tus datos se guardan solo en el dispositivo.
 
@@ -56,4 +57,4 @@ Abre `http://localhost:8080`. El iPhone solo activa el modo sin conexión por HT
 
 ## Actualizar
 
-Si cambias `index.html`, cambia también en `sw.js` el nombre de la caché (`aschelude-v2` → `aschelude-v3`) para que los dispositivos descarguen la versión nueva.
+Si cambias `index.html`, cambia también en `sw.js` el nombre de la caché (`aschelude-v4` → `aschelude-v5`) para que los dispositivos descarguen la versión nueva.

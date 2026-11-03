@@ -483,7 +483,7 @@ function parse(text, t) {
     if (q) {
       if (/tarde|noche|pm/.test(q) && h < 12) h += 12;
       if (/manana|am/.test(q) && h === 12) h = 0;
-    } else if (fromA && h >= 1 && h <= 7) h += 12;
+    }
     return h > 23 || mi > 59 ? null : h * 60 + mi;
   };
   const Q = '(\\s*(?:de la manana|de la tarde|de la noche|de la madrugada|am|pm))?';
@@ -503,6 +503,13 @@ function parse(text, t) {
     out.rec = { days: days.sort() };
   });
 
+  eat(`\\b${WDN}(?:\\s*(?:,|y)\\s*(?:el |los )?${WDN})+`, m => {
+    if (out.rec) return false;
+    const days = [...new Set([...m[0].matchAll(/(lunes|martes|miercoles|jueves|viernes|sabado|domingo)/g)].map(x => WDI[x[1]]))];
+    if (days.length < 2) return false;
+    out.rec = { days: days.sort() };
+  });
+
   // Bloques
   const DU = '(\\d+(?:[.,]\\d+)?)\\s*(h|hrs?|horas?|m|min|mins|minutos?)(?![a-z])';
   eat(`\\b(?:en |por )?(?:bloques|sesiones|tandas|ratos)\\s+de\\s+${DU}`, m => { const v = parseFloat(m[1].replace(',', '.')) * (m[2][0] === 'm' ? 1 : 60); if (!(v >= 15)) return false; out.split = Math.round(v / 15) * 15; });
@@ -510,24 +517,48 @@ function parse(text, t) {
   eat('\\ben (\\d{1,2}|dos|tres|cuatro|cinco|seis) (?:bloques|sesiones|partes|tandas|veces)\\b', m => { out.parts = +m[1] || NUMW[m[1]]; });
   eat('\\b(?:sin dividir|de una vez|del tiron|de un tiron|todo seguido)\\b', () => { out.split = 0; });
 
-  // Rangos horarios
-  const setRange = (h1, m1, h2, m2, q) => {
-    let a = hour(h1, m1, q, true), b = hour(h2, m2, q, true);
-    if (a == null || b == null) return false;
-    if (b <= a && b + 720 > a && +h2 < 12) b += 720;
-    if (b <= a) return false;
-    out.start = toHM(a); out.dur = b - a; out.durSet = true;
+  // Duración aproximada: «de 2 a 3 horas», «entre 30 y 45 minutos» → la mayor
+  eat('\\b(?:de |entre )?(\\d+(?:[.,]\\d+)?)\\s*(?:a|-|y)\\s*(\\d+(?:[.,]\\d+)?)\\s*(horas?|minutos?|mins?)\\b', m => {
+    const v = parseFloat(m[2].replace(',', '.')) * (m[3][0] === 'm' ? 1 : 60);
+    if (!(v > 0)) return false; out.dur = Math.round(v); out.durSet = true;
+  });
+
+  // Rangos horarios en formato 24 h: «de 6 a 15:30», «16:30 a 19», «20 a 22», «20-22h», «entre las 9 y las 11», «de 5 a 7 de la tarde»
+  const QW = '(?:de la manana|de la tarde|de la noche|de la madrugada|am|pm)';
+  const TM = `(\\d{1,2})(?:[:.h](\\d{2}))?(?:\\s*(?:hrs?|h)(?![a-z]))?(?:\\s+(y media|y cuarto))?(\\s*${QW}\\b)?`;
+  const NOT_UNIT = '(?!\\s*(?:horas?|minutos?|mins?|dias?|semanas?|meses|veces|personas?|kg|kilos?|litros?|euros?|km)\\b)(?![\\d:./])';
+  const COUNT = /(?:temas?|capitulos?|caps?|paginas?|pags?|ejercicios?|lecciones?|unidad(?:es)?|puntos?|niveles?|series?|repeticiones?)\s*$/;
+  const qOf = q => (!q ? '' : /tarde|noche|pm/.test(q) ? 'pm' : 'am');
+  const hm = (h, mi, x, q) => {
+    h = +h; mi = +(mi || 0) + (x === 'y media' ? 30 : x === 'y cuarto' ? 15 : 0);
+    if (h > 24 || mi > 59) return null;
+    if (q === 'pm' && h < 12) h += 12; else if (q === 'am' && h === 12) h = 0;
+    return h * 60 + mi;
   };
-  eat(`\\b(?:de|desde)(?: las?)?\\s+(\\d{1,2})(?:[:.h](\\d{2}))?\\s*h?\\s+(?:a|hasta)(?: las?)?\\s+(\\d{1,2})(?:[:.h](\\d{2}))?\\s*h?\\b(?!\\s*(?:horas?|min))${Q}`, m => setRange(m[1], m[2], m[3], m[4], m[5]));
-  eat('\\b(\\d{1,2})[:.](\\d{2})\\s*(?:-|–|a)\\s*(\\d{1,2})[:.](\\d{2})\\b', m => setRange(m[1], m[2], m[3], m[4]));
+  // g = [h1, min1, extra1, cualif1, h2, min2, extra2, cualif2]
+  const setRange = (g, pre, at) => {
+    if (!pre && COUNT.test(n.slice(Math.max(0, at - 16), at))) return false;
+    const q1 = qOf(g[3]), q2 = qOf(g[7]);
+    let a = hm(g[0], g[1], g[2], q1), b = hm(g[4], g[5], g[6], q2);
+    if (a == null || b == null) return false;
+    if (!q1 && q2) { const a2 = hm(g[0], g[1], g[2], q2); if (a2 < b) a = a2; }                 // solo si lo escribes: «de 5 a 7 de la tarde»
+    if (b <= a) b += 1440;                                                                       // 24 h estricto: «de 22 a 2» cruza la medianoche
+    if (b - a < 5 || b - a > 960) return false;
+    out.start = toHM(a % 1440); out.dur = b - a; out.durSet = true;
+  };
+  eat(`\\bentre\\s+(?:las?\\s+)?${TM}\\s+y\\s+(?:las?\\s+)?${TM}${NOT_UNIT}`, m => setRange(m.slice(1, 9), 'entre', m.index));
+  eat(`(?:\\b(de|desde|a)\\s+(?:las?\\s+)?)?\\b${TM}\\s*(?:a|hasta|-|–|—)\\s*(?:las?\\s+)?${TM}${NOT_UNIT}`, m => {
+    if (!m[1] && /^\d{1,2}\s*-\s*\d{1,2}$/.test(m[0].trim()) && /\b(?:el|dia)\s+$/.test(n.slice(Math.max(0, m.index - 5), m.index))) return false; // «el 12-11» es una fecha
+    return setRange(m.slice(2, 10), m[1], m.index);
+  });
 
   // Hora
-  if (!out.start) eat(`\\ba las?\\s+(\\d{1,2})(?:[:.h](\\d{2}))?\\s*h?(?:\\s+(y media|y cuarto|menos cuarto))?${Q}`, m => {
+  if (!out.start) eat(`\\b(?:a las?|desde(?: las?)?)\\s+(\\d{1,2})(?:[:.h](\\d{2}))?\\s*h?(?:\\s+(y media|y cuarto|menos cuarto))?${Q}`, m => {
     let v = hour(m[1], m[2], m[4], true); if (v == null) return false;
     if (m[3]) v += m[3] === 'y media' ? 30 : m[3] === 'y cuarto' ? 15 : -15;
     out.start = toHM((v + 1440) % 1440);
   });
-  if (!out.start) eat(`\\b(\\d{1,2})[:.](\\d{2})\\s*(?:h|hrs?)?\\b${Q}`, m => { const v = hour(m[1], m[2], m[3], false); if (v == null) return false; out.start = toHM(v); });
+  if (!out.start) eat(`\\b(\\d{1,2})[:.](\\d{2})\\s*(?:hrs?|h)?\\b${Q}`, m => { const v = hour(m[1], m[2], m[3], false); if (v == null) return false; out.start = toHM(v); });
   if (!out.start) eat('\\b(\\d{1,2})\\s*(am|pm)\\b', m => { const v = hour(m[1], 0, m[2], false); if (v == null) return false; out.start = toHM(v); });
   if (!out.start) eat('\\b(\\d{1,2})\\s?h(\\d{2})?\\b', m => { if (+m[1] < 7 || +m[1] > 23) return false; out.start = toHM(hour(m[1], m[2], null, false)); });
   if (!out.start) eat('\\b(?:al|a) mediodia\\b', () => { out.start = '14:00'; });
@@ -910,7 +941,8 @@ function toggleSub(id, sid, d, k) {
 function contextualize(p, ctx) {
   const t = todayStr();
   if (!p.date && !p.deadline && !p.rec && !p.after) {
-    if (ctx && ctx > t) p.date = ctx; else if (p.start) p.date = t;
+    if (ctx && ctx > t) p.date = ctx;
+    else if (p.start) p.date = toMin(p.start) + (p.dur || 60) <= nowMin() ? addDays(t, 1) : t; // si ya pasó hoy, la próxima vez: mañana
   }
   if (p.rec && !p.date) p.date = t;
   return p;
@@ -924,6 +956,9 @@ function addFromText(text, ctx, noSnap) {
   S.events.push(ev); persist(); render();
   return ev;
 }
+/* Varias líneas pegadas a la vez: una por evento (se quitan viñetas como «- », «• » o «1. ») */
+const splitLines = txt => String(txt || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-–—•*·]|\d+[.)])\s+/, '').trim()).filter(Boolean).slice(0, 30);
+function addMany(lines, ctx) { snap(); return lines.map(l => addFromText(l, ctx, true)).filter(Boolean); }
 function placeText(ev) {
   const o = firstOcc(ev.id);
   if (o) {
@@ -1027,6 +1062,13 @@ function openCheckin() {
     const ev = addFromText(inp.value, t); if (!ev) return;
     added.unshift(ev); inp.value = ''; go.disabled = true; $('#ci-chips', sh).innerHTML = '';
     drawAdded(); drawDay(); inp.focus();
+  });
+  inp.addEventListener('paste', e => {
+    const lines = splitLines(e.clipboardData && e.clipboardData.getData('text'));
+    if (lines.length < 2) return;
+    e.preventDefault();
+    addMany(lines, t).forEach(ev => added.unshift(ev));
+    drawAdded(); drawDay();
   });
   sh.onclick = e => {
     if (e.target.closest('[data-x="close"]')) return closeSheet();
@@ -1416,8 +1458,7 @@ function fromUrl() {
   if (!add && !rev) return false;
   try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
   if (add) {
-    snap();
-    const evs = add.split(/\n|;/).map(x => x.trim()).filter(Boolean).slice(0, 20).map(x => addFromText(x, null, true)).filter(Boolean);
+    const evs = addMany(splitLines(add.replace(/;/g, '\n')), null);
     if (evs.length) toast(evs.length === 1 ? 'Añadido · ' + placeText(evs[0]) : `Añadidos ${evs.length} eventos`, true);
   }
   if (rev) setTimeout(openCheckin, 300);
@@ -1451,6 +1492,14 @@ $('#qa').addEventListener('submit', e => {
   const o = firstOcc(ev.id);
   if (o) { UI.sel = o.d; UI.week = weekStartOf(o.d); render(); }
   toast('Organizado · ' + placeText(ev), true);
+});
+qi.addEventListener('paste', e => {
+  const lines = splitLines(e.clipboardData && e.clipboardData.getData('text'));
+  if (lines.length < 2) return;
+  e.preventDefault();
+  const evs = addMany(lines, wide() ? null : UI.sel); if (!evs.length) return;
+  const o = firstOcc(evs[0].id); if (o) { UI.sel = o.d; UI.week = weekStartOf(o.d); render(); }
+  toast(`Organizados ${evs.length} eventos`, true);
 });
 
 document.addEventListener('keydown', e => {
