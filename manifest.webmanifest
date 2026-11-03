@@ -1,8 +1,8 @@
 {
-  "name": "Semana",
-  "short_name": "Semana",
+  "name": "ASchelude",
+  "short_name": "ASchelude",
   "lang": "es",
-  "description": "Organiza tu semana: revisión diaria y huecos automáticos. Funciona sin conexión.",
+  "description": "Organiza tu semana: revisión diaria, huecos automáticos y bloques. Funciona sin conexión.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,5 +1,5 @@
-// Semana · service worker: guarda la app para usarla sin conexión.
-const CACHE = 'semana-v1';
+// ASchelude · service worker: guarda la app para usarla sin conexión.
+const CACHE = 'aschelude-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -14,7 +14,7 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(hit => {
       const net = fetch(e.request).then(res => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
+        if (res.ok && !url.search) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
         return res;
       }).catch(() => hit || caches.match('./index.html'));
       return hit || net;

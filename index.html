@@ -3,18 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Organiza tu semana: revisión diaria y huecos automáticos. Funciona sin conexión.">
+<meta name="description" content="Organiza tu semana: revisión diaria, huecos automáticos y bloques. Funciona sin conexión.">
 <meta name="theme-color" content="#FBFBFD" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Semana">
+<meta name="apple-mobile-web-app-title" content="ASchelude">
+<meta name="application-name" content="ASchelude">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>Semana</title>
+<title>ASchelude</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Layout: una columna serena (≤640px) con tira de días + agenda en móvil; desde 960px, tablero de 7 columnas bajo una barra translúcida. Rejilla de 8 pt y escala tipográfica HIG (11·13·15·17·20·22·28·34). */
@@ -254,6 +255,78 @@ svg{display:block}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 </style>
 
+<style>
+/* v2: subtareas, bloques, arrastrar, resumen y cierre de semana */
+:root{
+  --t-hero:3.5rem;
+  --tick:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.2 7.4 5.8 10 10.8 4.6' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Subtareas en la agenda */
+.main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.subs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.sb{display:flex;align-items:center;gap:10px;width:100%;min-height:30px;padding:4px 0;border:0;background:none;text-align:left;font-size:var(--t-sub);line-height:1.3;color:var(--ink)}
+.sb::before{content:"";flex:none;width:18px;height:18px;border-radius:50%;border:1.25px solid var(--ink-3);transition:background-color .2s,border-color .2s}
+.sb[aria-pressed="true"]{color:var(--ink-3);text-decoration:line-through;text-decoration-thickness:1px}
+.sb[aria-pressed="true"]::before{border-color:var(--cat);background:var(--cat) var(--tick) center/11px no-repeat}
+.evb svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.x2{display:flex;align-items:center;gap:4px;font-size:var(--t-cap);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.x2 .sep{color:var(--ink-3)}
+.mrow .ti.dn{color:var(--ink-3)}
+
+/* Cabecera del día y reorganizar */
+.dh-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.tb.sm{flex:none;font-size:var(--t-foot);font-weight:500;padding:4px 0 4px 8px}
+.col-h .re{margin-top:2px;padding:0;border:0;background:none;color:var(--accent);font-size:var(--t-cap);font-weight:600;letter-spacing:.01em}
+
+/* Resumen semanal: horas por categoría en una barra fina */
+.wsum-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:28px 16px 8px}
+.wsum-h .label{margin:0}
+.wsum-c{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--surface);border:.5px solid var(--line);border-radius:14px}
+.wsum-n{margin:0;font:600 var(--t-t3)/1.2 var(--font-display);letter-spacing:-.015em;font-variant-numeric:tabular-nums}
+.wsum-n span{font:400 var(--t-foot)/1.3 var(--font);letter-spacing:0;color:var(--ink-2)}
+.cbar{display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;background:var(--fill-2)}
+.cbar i{display:block;min-width:3px;background:var(--cat)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:var(--t-foot);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.legend b{font-weight:500;color:var(--ink)}
+.board > .wsum{grid-column:1/-1;margin-top:16px}
+.board > .wsum .wsum-h{margin-left:0;margin-right:0}
+
+/* Arrastrar */
+[data-drag]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ev[data-drag]{cursor:grab}
+body.dragging,body.dragging *{cursor:grabbing!important}
+.lifted{opacity:.35}
+.ghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;display:flex;align-items:center;gap:8px;max-width:min(320px,80vw);padding:10px 16px;border-radius:12px;background:var(--surface);color:var(--ink);font-size:var(--t-sub);font-weight:500;white-space:nowrap;box-shadow:var(--shadow),0 0 0 .5px var(--line)}
+.ghost span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.dbtn .n{transition:background .2s,color .2s,transform .25s var(--ease)}
+body.dragging .dbtn .n{box-shadow:inset 0 0 0 1px var(--line)}
+.dbtn.drop-on .n,.dbtn.drop-on.sel .n,.dbtn.drop-on.today .n,.dbtn.drop-on.sel.today .n{background:var(--accent);color:var(--accent-ink);box-shadow:none;transform:scale(1.12)}
+.col{transition:background-color .2s}
+.col.drop-on{background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:12px}
+body.dragging .ib[data-flip]{background:var(--fill)}
+
+/* Cierre de semana */
+.cl-e{margin:8px 4px 0}
+.hero-n{margin:4px 4px 0;font:700 var(--t-hero)/1 var(--font-display);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.hero-n small{margin-left:2px;font-size:var(--t-t1);font-weight:600;letter-spacing:-.02em;color:var(--ink-2)}
+.hero-s{margin:8px 4px 24px;font-size:var(--t-sub);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.grp.pad{display:flex;flex-direction:column;gap:12px;padding:16px}
+.fr .k2{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.fr .tt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr .v{flex:none;font-size:var(--t-sub);color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+/* Subtareas en la ficha */
+.fr.st{justify-content:flex-start}
+.fr.st input{text-align:left;color:var(--ink)}
+.fr.st input.dn{color:var(--ink-3);text-decoration:line-through}
+.stk{flex:none;width:22px;height:22px;padding:0;border-radius:50%;border:1.5px solid var(--ink-3);background:none;transition:background-color .2s,border-color .2s}
+.stk[aria-pressed="true"]{border-color:var(--accent);background:var(--accent) var(--tick) center/12px no-repeat}
+.stk.add{border-style:dashed;opacity:.6}
+.gf.ver{margin:-8px 16px 0;text-align:center;color:var(--ink-3)}
+</style>
+
 </head>
 <body>
 <header class="bar">
@@ -263,9 +336,9 @@ svg{display:block}
       <h2 class="title" id="mo">Esta semana</h2>
     </div>
     <nav class="tools" aria-label="Navegación">
-      <button class="ib" id="prev" type="button" aria-label="Semana anterior"><svg viewBox="0 0 20 20"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg></button>
+      <button class="ib" id="prev" type="button" data-flip="-1" aria-label="Semana anterior"><svg viewBox="0 0 20 20"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg></button>
       <button class="pill" id="today" type="button">Hoy</button>
-      <button class="ib" id="next" type="button" aria-label="Semana siguiente"><svg viewBox="0 0 20 20"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg></button>
+      <button class="ib" id="next" type="button" data-flip="1" aria-label="Semana siguiente"><svg viewBox="0 0 20 20"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg></button>
       <span class="vsep" aria-hidden="true"></span>
       <button class="ib" id="ci" type="button" aria-label="Revisión del día" title="Revisión del día"><svg viewBox="0 0 20 20"><path d="M2.5 14.5h15M5.5 14.5a4.5 4.5 0 0 1 9 0M10 3.5v2.5M4.3 6.8l1.6 1.6M15.7 6.8l-1.6 1.6"/></svg></button>
       <button class="ib" id="cfg" type="button" aria-label="Ajustes" title="Ajustes"><svg viewBox="0 0 20 20"><path d="M3 6h8.5M15.5 6H17M3 14h2.5M9.5 14H17"/><circle cx="13.5" cy="6" r="2"/><circle cx="7.5" cy="14" r="2"/></svg></button>
@@ -430,6 +503,13 @@ function parse(text, t) {
     out.rec = { days: days.sort() };
   });
 
+  // Bloques
+  const DU = '(\\d+(?:[.,]\\d+)?)\\s*(h|hrs?|horas?|m|min|mins|minutos?)(?![a-z])';
+  eat(`\\b(?:en |por )?(?:bloques|sesiones|tandas|ratos)\\s+de\\s+${DU}`, m => { const v = parseFloat(m[1].replace(',', '.')) * (m[2][0] === 'm' ? 1 : 60); if (!(v >= 15)) return false; out.split = Math.round(v / 15) * 15; });
+  eat('\\b(?:en |por )?(?:bloques|sesiones|tandas|ratos)\\s+de\\s+(media hora|una hora|hora y media|dos horas|tres horas)\\b', m => { out.split = { 'media hora': 30, 'una hora': 60, 'hora y media': 90, 'dos horas': 120, 'tres horas': 180 }[m[1]]; });
+  eat('\\ben (\\d{1,2}|dos|tres|cuatro|cinco|seis) (?:bloques|sesiones|partes|tandas|veces)\\b', m => { out.parts = +m[1] || NUMW[m[1]]; });
+  eat('\\b(?:sin dividir|de una vez|del tiron|de un tiron|todo seguido)\\b', () => { out.split = 0; });
+
   // Rangos horarios
   const setRange = (h1, m1, h2, m2, q) => {
     let a = hour(h1, m1, q, true), b = hour(h2, m2, q, true);
@@ -477,11 +557,19 @@ function parse(text, t) {
   eat('\\b(?:durante\\s+)?(un|una|dos|tres|cuatro|cinco|seis)\\s+horas?\\b', m => setDur(NUMW[m[1]] * 60));
   eat('\\b(?:durante\\s+)?(\\d{1,3})\\s*(?:m|min|mins|minutos?)\\b', m => setDur(+m[1]));
 
+  if (out.parts > 1 && out.durSet) out.split = Math.max(15, Math.ceil(out.dur / out.parts / 15) * 15);
+  delete out.parts;
+
   // Título
   let title = s.split('').filter((c, i) => !used[i]).join('').replace(/\s+/g, ' ').trim();
   const CON1 = /^(?:(?:el|la|los|las|de|del|a|al|en|y|para|por|con|desde|hasta|que)\s+|[,;\-–·]\s*)/i;
   const CON2 = /(?:\s+(?:el|la|los|las|de|del|a|al|en|y|para|por|con|desde|hasta|que|antes)|\s*[,;\-–·])$/i;
   for (let i = 0; i < 6; i++) { const b = title; title = title.replace(CON1, '').replace(CON2, '').trim(); if (b === title) break; }
+  const sm = title.match(/^(.*?\D)\s*:\s*(\D.*)$/);
+  if (sm) {
+    const subs = sm[2].split(/\s*[,;]\s*|\s+y\s+|\s+e\s+/).map(x => x.trim().replace(/\.+$/, '')).filter(Boolean).slice(0, 12);
+    if (subs.length) { out.subs = subs; title = sm[1].replace(CON2, '').trim(); }
+  }
   if (!title) return null;
   out.title = cap(title);
 
@@ -495,32 +583,47 @@ function parse(text, t) {
 }
 
 /* ---------- Datos ---------- */
-const KEY = 'semana.v1';
+const KEY = 'aschelude.v1', OLD_KEY = 'semana.v1';
 const Store = {
-  load() { try { const r = localStorage.getItem(KEY); if (r) { const d = JSON.parse(r); if (d && Array.isArray(d.events)) return d; } } catch (e) {} return null; },
+  load() { try { const r = localStorage.getItem(KEY) || localStorage.getItem(OLD_KEY); if (r) { const d = JSON.parse(r); if (d && Array.isArray(d.events)) return d; } } catch (e) {} return null; },
   save(st) { try { localStorage.setItem(KEY, JSON.stringify(st)); return true; } catch (e) { return false; } }
 };
-const blank = o => Object.assign({ id: uid(), title: '', notes: '', date: null, start: null, dur: 60, cat: 'otro', prio: 0, deadline: null, after: null, rec: null, win: null, done: false, doneOn: {}, skip: {}, created: Date.now() }, o);
+const blank = o => Object.assign({ id: uid(), title: '', notes: '', date: null, start: null, dur: 60, cat: 'otro', prio: 0, deadline: null, after: null, rec: null, win: null, split: null, doneParts: [], subs: [], subDone: {}, done: false, doneOn: {}, skip: {}, created: Date.now() }, o);
 function seed() {
   const t = todayStr(), w = weekStartOf(t);
   const ex = o => blank(Object.assign({ ex: true }, o));
-  return { v: 1, settings: { dayStart: '08:00', dayEnd: '22:00', name: '' }, checkins: {}, events: [
-    ex({ title: 'Clase', date: w, start: '15:00', dur: 360, cat: 'estudio', rec: { days: [0, 1, 2, 3, 4] } }),
-    ex({ title: 'Gimnasio', date: w, start: '08:30', dur: 75, cat: 'deporte', rec: { days: [0, 2, 4] } }),
-    ex({ title: 'Entregar práctica', deadline: addDays(t, 3), dur: 120, cat: 'estudio', prio: 2 }),
+  const sub = x => ({ id: uid(), t: x, done: false }), past = () => (w < t ? { [w]: true } : {});
+  return { v: 2, since: t, closes: {}, settings: { dayStart: '08:00', dayEnd: '22:00', name: '' }, checkins: {}, events: [
+    ex({ title: 'Clase', date: w, start: '15:00', dur: 360, cat: 'estudio', rec: { days: [0, 1, 2, 3, 4] }, doneOn: past() }),
+    ex({ title: 'Gimnasio', date: w, start: '08:30', dur: 75, cat: 'deporte', rec: { days: [0, 2, 4] }, doneOn: past() }),
+    ex({ title: 'Práctica Docker', deadline: addDays(t, 3), dur: 360, cat: 'estudio', prio: 2, subs: [sub('Dockerfile'), sub('docker-compose.yml'), sub('Memoria en PDF')] }),
     ex({ title: 'Dentista', date: addDays(t, 2), start: '10:30', dur: 45, cat: 'salud' }),
-    ex({ title: 'Compra semanal', date: addDays(w, 5), win: 'm', dur: 60, cat: 'personal' }),
+    ex({ title: 'Compra semanal', date: addDays(w, 5), win: 'm', dur: 60, cat: 'personal', subs: [sub('Fruta'), sub('Leche'), sub('Café')] }),
     ex({ title: 'Llamar a casa', dur: 30, cat: 'personal' }),
     ex({ title: 'Repasar apuntes', dur: 45, cat: 'estudio', notes: 'Temas 3 y 4' })
   ] };
 }
-let S = Store.load() || seed();
+function normalize(d) {
+  const o = { v: 2, since: d.since || todayStr(), settings: Object.assign({ dayStart: '08:00', dayEnd: '22:00', name: '' }, d.settings), checkins: d.checkins || {}, closes: d.closes || {}, events: (d.events || []).map(e => blank(e)) };
+  if ((d.v || 1) < 2 && o.events.some(e => e.ex)) o.events = o.events.filter(e => !e.ex).concat(seed().events);
+  return o;
+}
+let S = normalize(Store.load() || seed());
 const persist = () => Store.save(S);
 const byId = id => S.events.find(e => e.id === id);
 
 /* ---------- Organizador ---------- */
 const recOn = (ev, d) => !!ev.rec && !!ev.date && d >= ev.date && ev.rec.days.includes(wd(d)) && !(ev.skip && ev.skip[d]);
 const isDone = (ev, d) => (ev.rec ? !!(ev.doneOn && ev.doneOn[d]) : !!ev.done);
+const itemDone = it => (it.pdone != null ? it.pdone : isDone(it.ev, it.d));
+const doneMin = ev => (ev.doneParts || []).reduce((a, p) => a + p.dur, 0);
+const remaining = ev => Math.max(0, ev.dur - doneMin(ev));
+const splits = ev => !ev.rec && !ev.start && (ev.split > 0 || (ev.split == null && ev.dur > 120) || (ev.doneParts || []).length > 0);
+const subDone = (ev, s, d) => (ev.rec ? !!(ev.subDone && ev.subDone[d] && ev.subDone[d][s.id]) : !!s.done);
+function setSub(ev, sid, d, v) {
+  if (ev.rec) { ev.subDone = ev.subDone || {}; const m = ev.subDone[d] = ev.subDone[d] || {}; if (v) m[sid] = true; else delete m[sid]; }
+  else { const s = (ev.subs || []).find(x => x.id === sid); if (s) s.done = v; }
+}
 function winRange(win) {
   const a = toMin(S.settings.dayStart), b = toMin(S.settings.dayEnd);
   if (win === 'm') return [a, Math.min(b, 840)];
@@ -533,13 +636,25 @@ function findSlot(busy, dur, a, b) {
   for (const [s, e] of busy) { if (e <= cur) continue; if (s - cur >= dur) break; cur = Math.max(cur, e); }
   return cur + dur <= b ? cur : -1;
 }
+/* Tamaño de los bloques: el elegido o, en automático, lo que reparte la tarea en los días disponibles (entre 1 y 2 h). */
+function blockSizes(ev, nDays) {
+  const rem = remaining(ev); if (rem <= 0) return [];
+  let size = rem;
+  if (ev.split > 0) size = ev.split;
+  else if (ev.split == null && rem > 120) size = Math.min(120, Math.max(60, Math.ceil(rem / Math.max(1, nDays) / 15) * 15));
+  const out = []; let r = rem;
+  while (r > 0) { const b = Math.min(size, r); out.push(b); r -= b; }
+  if (out.length > 1 && out[out.length - 1] < 30) { const l = out.pop(); out[out.length - 1] += l; }
+  return out;
+}
 function plan(from, to) {
   const t = todayStr(), nm = nowMin();
   const start = minS(from, t), end = maxS(to, addDays(t, 27));
   const P = {};
   for (let d = start; d <= end; d = addDays(d, 1)) P[d] = { items: [], loose: [], busy: [] };
-  const put = (d, ev, s, auto) => { const D = P[d]; if (!D) return; D.items.push({ ev, d, s, auto }); D.busy.push([s, s + ev.dur]); };
-  const loose = (d, ev, why) => { if (P[d]) P[d].loose.push({ ev, d, s: null, why }); };
+  const mk = (ev, d, s, auto, x) => Object.assign({ ev, d, s, auto, dur: ev.dur }, x);
+  const put = (d, ev, s, auto, x, pad) => { const D = P[d]; if (!D) return; const it = mk(ev, d, s, auto, x); D.items.push(it); D.busy.push([s, s + it.dur + (pad || 0)]); };
+  const loose = (d, ev, why, x) => { const D = P[d]; if (!D) return; D.loose.push(mk(ev, d, null, false, Object.assign({ why }, x))); };
   const bound = [], open = [];
   for (const ev of S.events) {
     if (ev.rec) {
@@ -548,46 +663,79 @@ function plan(from, to) {
       }
       continue;
     }
+    (ev.doneParts || []).forEach((p, i) => { const x = { dur: p.dur, part: {}, pdone: true, pi: i }; if (p.s) put(p.d, ev, toMin(p.s), false, x); else loose(p.d, ev, null, x); });
     if (ev.done) {
-      const fz = ev.frozen || { date: ev.date, start: ev.start };
-      if (fz.date) fz.start ? put(fz.date, ev, toMin(fz.start), false) : loose(fz.date, ev);
+      if (!(ev.doneParts || []).length) { const fz = ev.frozen || { date: ev.date, start: ev.start }; if (fz.date) fz.start ? put(fz.date, ev, toMin(fz.start), false) : loose(fz.date, ev, null); }
       continue;
     }
     if (ev.date && ev.start) { put(ev.date, ev, toMin(ev.start), false); continue; }
-    if (ev.date && ev.date < t) { loose(ev.date, ev, 'past'); continue; }
+    if (ev.date && ev.date < t) { loose(ev.date, ev, 'past', splits(ev) ? { dur: remaining(ev) } : null); continue; }
     if (ev.date) bound.push({ ev, d: ev.date }); else open.push(ev);
   }
-  const tryDay = (d, ev, win) => {
+  const tryDay = (d, dur, win) => {
     const D = P[d]; if (!D || d < t) return -1;
     let [a, b] = winRange(win);
     if (d === t) a = Math.max(a, Math.ceil((nm + 5) / 15) * 15);
     D.busy.sort((x, y) => x[0] - y[0]);
-    return findSlot(D.busy, ev.dur, a, b);
+    return findSlot(D.busy, dur, a, b);
+  };
+  const tryWin = (d, dur, win) => { let s = tryDay(d, dur, win); if (s < 0 && win) s = tryDay(d, dur, null); return s; };
+  const placeParts = (ev, days, fb) => {
+    const sizes = blockSizes(ev, days.length), n = sizes.length, D = Math.min(days.length, n);
+    sizes.forEach((dur, i) => {
+      const x = { dur, part: {} }, tg = Math.floor(i * D / n);
+      for (const d of days.slice(tg).concat(days.slice(0, tg))) { const s = tryWin(d, dur, ev.win); if (s >= 0) { put(d, ev, s, true, x, 15); return; } }
+      loose(fb, ev, 'full', x);
+    });
   };
   bound.sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : (y.ev.prio - x.ev.prio) || (y.ev.dur - x.ev.dur)));
   for (const { ev, d } of bound) {
-    let s = tryDay(d, ev, ev.win); if (s < 0 && ev.win) s = tryDay(d, ev, null);
-    s >= 0 ? put(d, ev, s, true) : loose(d, ev, 'full');
+    if (splits(ev)) { placeParts(ev, [d], d); continue; }
+    const s = tryWin(d, ev.dur, ev.win);
+    if (s >= 0) put(d, ev, s, true); else loose(d, ev, d < t ? 'past' : 'full');
   }
   open.sort((x, y) => ((x.deadline || '9') < (y.deadline || '9') ? -1 : (x.deadline || '9') > (y.deadline || '9') ? 1 : (y.prio - x.prio) || (x.created - y.created)));
   for (const ev of open) {
-    const from2 = maxS(t, ev.after || t);
-    const until = ev.deadline ? maxS(ev.deadline, from2) : addDays(from2, 13);
-    let placed = false;
-    for (let d = from2; d <= until && P[d]; d = addDays(d, 1)) {
-      let s = tryDay(d, ev, ev.win); if (s < 0 && ev.win) s = tryDay(d, ev, null);
-      if (s >= 0) { put(d, ev, s, true); placed = true; break; }
+    const from2 = maxS(t, ev.after || t), sp = splits(ev);
+    const until = ev.deadline ? maxS(ev.deadline, from2) : addDays(from2, sp ? 6 : 13);
+    const fb = ev.deadline && ev.deadline >= from2 ? minS(ev.deadline, end) : (P[from2] ? from2 : t);
+    if (sp) {
+      const days = []; for (let d = from2; d <= until && P[d] && days.length < 14; d = addDays(d, 1)) days.push(d);
+      placeParts(ev, days.length ? days : [fb], fb); continue;
     }
-    if (!placed) loose(ev.deadline && ev.deadline >= t ? minS(ev.deadline, end) : t, ev, 'full');
+    let placed = false;
+    for (let d = from2; d <= until && P[d]; d = addDays(d, 1)) { const s = tryWin(d, ev.dur, ev.win); if (s >= 0) { put(d, ev, s, true); placed = true; break; } }
+    if (!placed) loose(fb, ev, 'full');
   }
-  for (const d in P) P[d].items.sort((a, b) => a.s - b.s || a.ev.dur - b.ev.dur);
+  // Orden del día y numeración de bloques (Bloque 2 de 4)
+  const parts = {};
+  for (const d in P) {
+    const D = P[d]; D.items.sort((a, b) => a.s - b.s || a.dur - b.dur);
+    for (const it of D.items.concat(D.loose)) if (it.part) (parts[it.ev.id] = parts[it.ev.id] || []).push(it);
+  }
+  const key = it => it.d + (it.s == null ? '~' : String(it.s).padStart(4, '0'));
+  for (const id in parts) { const L = parts[id].sort((a, b) => (key(a) < key(b) ? -1 : 1)); L.forEach((it, i) => { it.part.k = i + 1; it.part.n = L.length; }); }
   return P;
 }
 function dayStats(P, d) {
   const D = P[d] || { items: [], loose: [] };
   const total = toMin(S.settings.dayEnd) - toMin(S.settings.dayStart);
-  const busy = D.items.reduce((a, i) => a + i.ev.dur, 0);
+  const busy = D.items.reduce((a, i) => a + i.dur, 0);
   return { n: D.items.length + D.loose.length, busy, free: Math.max(0, total - busy), ratio: Math.min(1, total > 0 ? busy / total : 0) };
+}
+function weekStats(P, w) {
+  const byCat = {}, groups = new Map(); let n = 0, nDone = 0, pmin = 0, dmin = 0;
+  for (let i = 0; i < 7; i++) {
+    const D = P[addDays(w, i)]; if (!D) continue;
+    for (const it of D.items.concat(D.loose)) {
+      const c = byCat[it.ev.cat] = byCat[it.ev.cat] || { plan: 0, done: 0 }, ok = itemDone(it);
+      c.plan += it.dur; pmin += it.dur; n++;
+      if (ok) { c.done += it.dur; dmin += it.dur; nDone++; }
+      const g = groups.get(it.ev.id) || { ev: it.ev, n: 0, done: 0, min: 0 };
+      g.n++; if (ok) { g.done++; g.min += it.dur; } groups.set(it.ev.id, g);
+    }
+  }
+  return { byCat, n, nDone, pmin, dmin, pct: n ? Math.round(nDone / n * 100) : 0, groups: [...groups.values()] };
 }
 const pendingPast = () => { const t = todayStr(); return S.events.filter(e => !e.rec && !e.done && e.date && e.date < t); };
 
@@ -597,14 +745,17 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const catVar = c => `var(--c-${CATS[c] ? c : 'otro'})`;
 const ICON = {
   check: '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.2 7.4 5.8 10 10.8 4.6"/></svg>',
-  rep: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 5.5A4 4 0 0 1 9.2 3.4M10 6.5a4 4 0 0 1-7.2 2.1M9.6 1.4v2.2H7.4M2.4 10.6V8.4h2.2"/></svg>'
+  rep: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 5.5A4 4 0 0 1 9.2 3.4M10 6.5a4 4 0 0 1-7.2 2.1M9.6 1.4v2.2H7.4M2.4 10.6V8.4h2.2"/></svg>',
+  list: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1.6 3.2l1 1 1.8-2M1.6 8.7l1 1 1.8-2M6.4 3.1h4.2M6.4 8.6h4.2"/></svg>'
 };
-const UI = { week: weekStartOf(todayStr()), sel: todayStr(), today: todayStr(), P: null, undo: null };
+const UI = { week: weekStartOf(todayStr()), sel: todayStr(), today: todayStr(), P: null, undo: null, reorg: 0 };
 const wide = () => window.matchMedia('(min-width: 960px)').matches;
+const dk = it => `data-id="${it.ev.id}" data-d="${it.d}"${it.part ? ` data-k="${it.part.k}"` : ''}`;
+const subsCount = (ev, d) => { const s = ev.subs || []; return s.length ? `${ICON.list}${s.filter(x => subDone(ev, x, d)).length}/${s.length}` : ''; };
 
 function render() {
   const P = plan(UI.week, addDays(UI.week, 6));
-  UI.P = P;
+  UI.P = P; UI.reorg = reorgCandidates().length;
   renderHeader(); renderStrip(P); renderAgenda(P); renderBoard(P); renderEx();
 }
 function renderHeader() {
@@ -618,31 +769,37 @@ function renderStrip(P) {
   const t = todayStr(); let h = '';
   for (let i = 0; i < 7; i++) {
     const d = addDays(UI.week, i), st = dayStats(P, d);
-    h += `<button type="button" class="dbtn${d === t ? ' today' : ''}${d === UI.sel ? ' sel' : ''}${d < t ? ' past' : ''}" data-act="sel" data-d="${d}" aria-pressed="${d === UI.sel}" aria-label="${esc(longDate(d))}, ${st.n} eventos">
+    h += `<button type="button" class="dbtn${d === t ? ' today' : ''}${d === UI.sel ? ' sel' : ''}${d < t ? ' past' : ''}" data-act="sel" data-d="${d}" data-drop="${d}" aria-pressed="${d === UI.sel}" aria-label="${esc(longDate(d))}, ${st.n} eventos">
       <span class="l">${LETRA[i]}</span><span class="n">${pd(d).getDate()}</span><span class="load${st.ratio > .8 ? ' hi' : ''}"><i style="width:${Math.round(st.ratio * 100)}%"></i></span></button>`;
   }
   $('#strip').innerHTML = h;
 }
 function subBits(it, d, compact) {
-  const ev = it.ev, done = isDone(ev, d), t = todayStr(), bits = [];
+  const ev = it.ev, done = itemDone(it), t = todayStr(), bits = [];
   if (!compact) bits.push(`<span class="dot"></span>${CATS[ev.cat] ? CATS[ev.cat].n : 'Otro'}`);
-  bits.push(fmtDur(ev.dur));
+  bits.push(fmtDur(it.dur));
+  if (it.part && it.part.n > 1) bits.push(`Bloque ${it.part.k} de ${it.part.n}`);
+  if (compact && (ev.subs || []).length) bits.push(subsCount(ev, d));
   if (ev.rec) bits.push(`${ICON.rep}${recText(ev.rec)}`);
-  if (it.auto && !done) bits.push('Organizado');
+  if (it.auto && !done && !(it.part && it.part.n > 1)) bits.push('Organizado');
   if (!ev.rec && ev.deadline && !done) bits.push(ev.deadline < t ? `<span class="warn">Vencía ${relDay(ev.deadline).toLowerCase()}</span>` : `Límite ${relDay(ev.deadline).toLowerCase()}`);
   if (it.why === 'full' && !done) bits.push('<span class="warn">Sin hueco libre</span>');
   return bits.join('<span class="sep">·</span>');
 }
+function subsHTML(it) {
+  const ev = it.ev, subs = ev.subs || []; if (!subs.length) return '';
+  return `<ul class="subs">${subs.map(s => `<li><button type="button" class="sb" data-act="sub" data-sid="${s.id}" ${dk(it)} aria-pressed="${subDone(ev, s, it.d)}">${esc(s.t)}</button></li>`).join('')}</ul>`;
+}
 function rowHTML(it) {
-  const ev = it.ev, d = it.d, done = isDone(ev, d);
-  const tm = it.s != null ? `<div class="tm">${toHM(it.s)}<small>${toHM(it.s + ev.dur)}</small></div>` : '<div class="tm none">—</div>';
-  return `<li class="row${done ? ' done' : ''}" style="--cat:${catVar(ev.cat)}">
-    <button type="button" class="ck" data-act="toggle" data-id="${ev.id}" data-d="${d}" aria-pressed="${done}" aria-label="${done ? 'Marcar como pendiente' : 'Marcar como hecho'}: ${esc(ev.title)}">${ICON.check}</button>
+  const ev = it.ev, done = itemDone(it);
+  const tm = it.s != null ? `<div class="tm">${toHM(it.s)}<small>${toHM(it.s + it.dur)}</small></div>` : '<div class="tm none">—</div>';
+  return `<li class="row${done ? ' done' : ''}" style="--cat:${catVar(ev.cat)}" data-drag ${dk(it)}>
+    <button type="button" class="ck" data-act="toggle" ${dk(it)} aria-pressed="${done}" aria-label="${done ? 'Marcar como pendiente' : 'Marcar como hecho'}: ${esc(ev.title)}">${ICON.check}</button>
     ${tm}
-    <button type="button" class="body" data-act="open" data-id="${ev.id}" data-d="${d}">
+    <div class="main"><button type="button" class="body" data-act="open" ${dk(it)}>
       <span class="ti">${ev.prio ? '<span class="prio">!</span>' : ''}${esc(ev.title)}</span>
-      <span class="sub">${subBits(it, d)}</span>${ev.notes ? `<span class="nt">${esc(ev.notes)}</span>` : ''}
-    </button></li>`;
+      <span class="sub">${subBits(it, it.d)}</span>${ev.notes ? `<span class="nt">${esc(ev.notes)}</span>` : ''}
+    </button>${done ? '' : subsHTML(it)}</div></li>`;
 }
 function metaText(st) {
   if (!st.n) return 'Sin eventos';
@@ -651,7 +808,8 @@ function metaText(st) {
 function renderAgenda(P) {
   const d = UI.sel, t = todayStr(), D = P[d] || { items: [], loose: [] }, x = pd(d), st = dayStats(P, d);
   const h1 = d === t ? `Hoy <span>${DIAS[wd(d)]}, ${x.getDate()} ${MESES[x.getMonth()].slice(0, 3)}</span>` : `${cap(DIAS[wd(d)])} <span>${x.getDate()} de ${MESES[x.getMonth()]}</span>`;
-  let h = `<header class="dayhead"><h1>${h1}</h1><p class="meta">${metaText(st)}</p></header>`;
+  const re = d === t && UI.reorg ? '<button type="button" class="tb sm" data-act="reorg">Reorganizar</button>' : '';
+  let h = `<header class="dayhead"><h1>${h1}</h1><div class="dh-row"><p class="meta">${metaText(st)}</p>${re}</div></header>`;
   if (!D.items.length && !D.loose.length) {
     h += `<div class="list"><div class="empty"><b>${d < t ? 'Nada apuntado' : 'Día libre'}</b><p>${d < t ? 'Este día no tuvo eventos.' : 'Escribe abajo lo que tienes y lo coloco en el primer hueco que encaje.'}</p></div></div>`;
   } else {
@@ -664,28 +822,28 @@ function renderAgenda(P) {
       if (!nowDone) h += `<li class="nowl" aria-hidden="true"><span>${toHM(nm)}</span></li>`;
       h += '</ol>';
     }
-    if (D.loose.length) {
-      h += `<h2 class="label">${d < t ? 'Quedó sin hacer' : 'Sin hueco este día'}</h2><ol class="list">${D.loose.map(rowHTML).join('')}</ol>`;
-    }
+    if (D.loose.length) h += `<h2 class="label">${d < t ? 'Quedó sin hacer' : 'Sin hueco este día'}</h2><ol class="list">${D.loose.map(rowHTML).join('')}</ol>`;
   }
-  $('#agenda').innerHTML = h;
+  $('#agenda').innerHTML = h + weekSumHTML(P, UI.week);
 }
 function evHTML(it) {
-  const ev = it.ev, d = it.d, done = isDone(ev, d);
-  const tm = it.s != null ? `${toHM(it.s)} – ${toHM(it.s + ev.dur)}` : fmtDur(ev.dur);
-  return `<div class="ev${done ? ' done' : ''}" style="--cat:${catVar(ev.cat)}">
-    <button type="button" class="evb" data-act="open" data-id="${ev.id}" data-d="${d}" title="${esc(ev.title)} · ${esc(subBits(it, d).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '))}">
-      <span class="t"><i class="dot"></i>${tm}${ev.rec ? ICON.rep.replace('<svg', '<svg style="width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.75"') : ''}</span>
-      <span class="n">${ev.prio ? '<span class="prio">!</span>' : ''}${esc(ev.title)}</span>
+  const ev = it.ev, d = it.d, done = itemDone(it);
+  const tm = it.s != null ? `${toHM(it.s)} – ${toHM(it.s + it.dur)}` : fmtDur(it.dur);
+  const extra = [it.part && it.part.n > 1 ? `${it.part.k}/${it.part.n}` : '', subsCount(ev, d)].filter(Boolean).join('<span class="sep">·</span>');
+  return `<div class="ev${done ? ' done' : ''}" style="--cat:${catVar(ev.cat)}" data-drag ${dk(it)}>
+    <button type="button" class="evb" data-act="open" ${dk(it)} title="${esc(ev.title)}">
+      <span class="t"><i class="dot"></i>${tm}${ev.rec ? ICON.rep : ''}</span>
+      <span class="n">${ev.prio ? '<span class="prio">!</span>' : ''}${esc(ev.title)}</span>${extra ? `<span class="x2">${extra}</span>` : ''}
     </button>
-    <button type="button" class="ck" data-act="toggle" data-id="${ev.id}" data-d="${d}" aria-pressed="${done}" aria-label="${done ? 'Marcar como pendiente' : 'Marcar como hecho'}: ${esc(ev.title)}">${ICON.check}</button></div>`;
+    <button type="button" class="ck" data-act="toggle" ${dk(it)} aria-pressed="${done}" aria-label="${done ? 'Marcar como pendiente' : 'Marcar como hecho'}: ${esc(ev.title)}">${ICON.check}</button></div>`;
 }
 function renderBoard(P) {
   const t = todayStr(), nm = nowMin(); let h = '';
   for (let i = 0; i < 7; i++) {
     const d = addDays(UI.week, i), D = P[d] || { items: [], loose: [] }, st = dayStats(P, d);
-    h += `<div class="col${d === t ? ' today' : ''}${d < t ? ' past' : ''}"><div class="col-h"><span class="l">${DIAS[i].slice(0, 3)}</span><span class="n">${pd(d).getDate()}</span>
-      <span class="ld"><span class="load${st.ratio > .8 ? ' hi' : ''}"><i style="width:${Math.round(st.ratio * 100)}%"></i></span>${st.busy ? fmtDur(st.busy) : 'Libre'}</span></div>`;
+    h += `<div class="col${d === t ? ' today' : ''}${d < t ? ' past' : ''}" data-drop="${d}"><div class="col-h"><span class="l">${DIAS[i].slice(0, 3)}</span><span class="n">${pd(d).getDate()}</span>
+      <span class="ld"><span class="load${st.ratio > .8 ? ' hi' : ''}"><i style="width:${Math.round(st.ratio * 100)}%"></i></span>${st.busy ? fmtDur(st.busy) : 'Libre'}</span>
+      ${d === t && UI.reorg ? '<button type="button" class="re" data-act="reorg">Reorganizar</button>' : ''}</div>`;
     let nowDone = d !== t;
     for (const it of D.items) {
       if (!nowDone && it.s >= nm) { h += '<div class="nowb" aria-hidden="true"></div>'; nowDone = true; }
@@ -696,7 +854,7 @@ function renderBoard(P) {
     if (!D.items.length && !D.loose.length) h += `<p class="free">${d < t ? '—' : 'Nada todavía'}</p>`;
     h += '</div>';
   }
-  $('#board').innerHTML = h;
+  $('#board').innerHTML = h + weekSumHTML(P, UI.week);
 }
 function renderEx() {
   const has = S.events.some(e => e.ex);
@@ -706,22 +864,48 @@ function renderEx() {
 
 /* ---------- Acciones ---------- */
 function snap() { UI.undo = JSON.stringify(S); }
-function doUndo() { if (!UI.undo) return; S = JSON.parse(UI.undo); UI.undo = null; persist(); render(); }
-function findOcc(id, d) {
+function doUndo() { if (!UI.undo) return; S = normalize(JSON.parse(UI.undo)); UI.undo = null; persist(); render(); }
+const matchK = (i, id, k) => i.ev.id === id && (k == null || k === '' || (i.part && String(i.part.k) === String(k)));
+function findOcc(id, d, k) {
   const D = UI.P && UI.P[d]; if (!D) return null;
-  return D.items.find(i => i.ev.id === id) || D.loose.find(i => i.ev.id === id) || null;
+  return D.items.find(i => matchK(i, id, k)) || D.loose.find(i => matchK(i, id, k)) || null;
 }
 function firstOcc(id) {
   if (!UI.P) return null;
   for (const d of Object.keys(UI.P).sort()) { if (d < todayStr()) continue; const o = findOcc(id, d); if (o) return o; }
   return null;
 }
-function toggle(id, d) {
-  const ev = byId(id); if (!ev) return; snap();
+function occsOf(id) {
+  const r = []; if (UI.P) for (const d in UI.P) for (const i of UI.P[d].items.concat(UI.P[d].loose)) if (i.ev.id === id) r.push(i);
+  return r;
+}
+/* Marca el evento entero como hecho. En una tarea por bloques, guarda el bloque actual y quita el resto. */
+function markDone(ev, d, k) {
+  const it = findOcc(ev.id, d, k);
+  if (ev.rec) { ev.doneOn = ev.doneOn || {}; ev.doneOn[d] = true; return; }
+  if (it && it.part) { if (!it.pdone) ev.doneParts.push({ d: it.d, s: it.s != null ? toHM(it.s) : null, dur: it.dur }); ev.done = true; return; }
+  ev.done = true; ev.frozen = { date: it ? it.d : (ev.date || d), start: it && it.s != null ? toHM(it.s) : null };
+}
+function toggle(id, d, k) {
+  const ev = byId(id); if (!ev) return;
+  const it = findOcc(id, d, k); snap();
   if (ev.rec) { ev.doneOn = ev.doneOn || {}; if (ev.doneOn[d]) delete ev.doneOn[d]; else ev.doneOn[d] = true; }
+  else if (it && it.part) {
+    if (it.pdone) { ev.doneParts.splice(it.pi, 1); ev.done = false; }
+    else { ev.doneParts.push({ d: it.d, s: it.s != null ? toHM(it.s) : null, dur: it.dur }); if (remaining(ev) <= 0) ev.done = true; }
+  }
   else if (ev.done) { ev.done = false; delete ev.frozen; }
-  else { const o = findOcc(id, d); ev.done = true; ev.frozen = { date: o ? o.d : (ev.date || d), start: o && o.s != null ? toHM(o.s) : null }; }
+  else markDone(ev, d, k);
   persist(); render();
+}
+function toggleSub(id, sid, d, k) {
+  const ev = byId(id); if (!ev) return;
+  const s = (ev.subs || []).find(x => x.id === sid); if (!s) return;
+  snap(); const v = !subDone(ev, s, d); setSub(ev, sid, d, v);
+  const all = v && ev.subs.every(x => subDone(ev, x, d)) && !isDone(ev, d);
+  if (all) markDone(ev, d, k);
+  persist(); render();
+  if (all) toast('Subtareas completas · evento hecho', true);
 }
 function contextualize(p, ctx) {
   const t = todayStr();
@@ -731,16 +915,21 @@ function contextualize(p, ctx) {
   if (p.rec && !p.date) p.date = t;
   return p;
 }
-function addFromText(text, ctx) {
+function addFromText(text, ctx, noSnap) {
   const p = parse(text); if (!p) return null;
   contextualize(p, ctx);
-  const ev = blank({ title: p.title, date: p.date || null, start: p.start || null, dur: p.dur || 60, cat: p.cat, prio: p.prio || 0, deadline: p.deadline || null, after: p.after || null, rec: p.rec || null, win: p.win || null });
-  snap(); S.events.push(ev); persist(); render();
+  const ev = blank({ title: p.title, date: p.date || null, start: p.start || null, dur: p.dur || 60, cat: p.cat, prio: p.prio || 0, deadline: p.deadline || null, after: p.after || null, rec: p.rec || null, win: p.win || null,
+    split: p.split == null ? null : p.split, subs: (p.subs || []).map(t => ({ id: uid(), t, done: false })) });
+  if (!noSnap) snap();
+  S.events.push(ev); persist(); render();
   return ev;
 }
 function placeText(ev) {
   const o = firstOcc(ev.id);
-  if (o) return o.s != null ? `${relDay(o.d)}, ${toHM(o.s)}–${toHM(o.s + ev.dur)}` : `${relDay(o.d)} · sin hueco libre`;
+  if (o) {
+    const n = o.part && o.part.n > 1 ? ` · ${o.part.n} bloques` : '';
+    return (o.s != null ? `${relDay(o.d)}, ${toHM(o.s)}–${toHM(o.s + o.dur)}` : `${relDay(o.d)} · sin hueco libre`) + n;
+  }
   return ev.date ? relDay(ev.date) + (ev.start ? ', ' + ev.start : '') : 'Guardado';
 }
 function chipsFor(text, ctx) {
@@ -756,6 +945,8 @@ function chipsFor(text, ctx) {
   else if (p.win) c.push({ m: 'Por la mañana', t: 'Por la tarde', n: 'Por la noche' }[p.win]);
   if (!p.start) c.push(p.date || p.rec ? 'Hueco libre ese día' : 'Primer hueco libre');
   c.push(fmtDur(p.dur));
+  if (!p.start && !p.rec) { if (p.split > 0 && p.dur > p.split) c.push(`Bloques de ${fmtDur(p.split)}`); else if (p.split == null && p.dur > 120) c.push('Repartido en bloques'); }
+  if (p.subs) c.push(`${ICON.list}${p.subs.length} subtareas`);
   c.push(`<span class="dot" style="--cat:${catVar(p.cat)}"></span>${CATS[p.cat].n}`);
   if (p.prio) c.push('<span class="prio">!</span>Prioridad alta');
   return `<span class="chip t">${esc(p.title)}</span>` + c.map(x => `<span class="chip">${x}</span>`).join('');
@@ -763,11 +954,11 @@ function chipsFor(text, ctx) {
 
 /* ---------- Aviso ---------- */
 let toastT = 0;
-function toast(msg, undo) {
+function toast(msg, undo, sticky) {
   const el = $('#toast');
   el.innerHTML = `<span>${esc(msg)}</span>${undo ? '<button type="button" id="tundo">Deshacer</button>' : ''}`;
   el.hidden = false; requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
-  clearTimeout(toastT); toastT = setTimeout(hideToast, 4500);
+  clearTimeout(toastT); if (!sticky) toastT = setTimeout(hideToast, 4500);
   if (undo) $('#tundo').onclick = () => { doUndo(); hideToast(); };
 }
 function hideToast() { const el = $('#toast'); el.classList.remove('on'); setTimeout(() => { if (!el.classList.contains('on')) el.hidden = true; }, 300); }
@@ -776,6 +967,7 @@ function hideToast() { const el = $('#toast'); el.classList.remove('on'); setTim
 let sheetGen = 0, sheetOnClose = null;
 function openSheet(html, label, onClose) {
   const sh = $('#sheet'), sc = $('#scrim'), g = ++sheetGen;
+  sh.onclick = sh.oninput = sh.onkeydown = null;
   sh.innerHTML = '<div class="grab" aria-hidden="true"></div>' + html;
   sh.setAttribute('aria-label', label);
   sh.hidden = false; sc.hidden = false;
@@ -794,75 +986,6 @@ function closeSheet() {
 }
 const sheetOpen = () => !$('#sheet').hidden && $('#sheet').classList.contains('on');
 
-/* Detalle de evento */
-const DURS = [15, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300, 360, 480];
-function openEdit(id, d) {
-  const ev = byId(id); if (!ev) return;
-  const o = findOcc(id, d);
-  const recKey = !ev.rec ? 'none' : (() => { const k = [...ev.rec.days].sort().join(''); return k === '0123456' ? 'daily' : k === '01234' ? 'weekdays' : k === '56' ? 'weekend' : (ev.rec.days.length === 1 ? 'weekly' : 'custom'); })();
-  const durs = DURS.includes(ev.dur) ? DURS : [...DURS, ev.dur].sort((a, b) => a - b);
-  const done = isDone(ev, d);
-  const sh = openSheet(`
-    <div class="sh-nav"><button type="button" class="tb" data-x="cancel">Cancelar</button><span class="tl">${ev.rec ? 'Evento repetido' : 'Evento'}</span><button type="button" class="tb b" data-x="save">Guardar</button></div>
-    <div class="sh-body">
-      <div class="grp">
-        <div class="fr big"><input id="f-title" type="text" value="${esc(ev.title)}" placeholder="Título" aria-label="Título"></div>
-        <div class="fr"><textarea id="f-notes" placeholder="Notas" aria-label="Notas">${esc(ev.notes)}</textarea></div>
-      </div>
-      <div class="gh">Cuándo</div>
-      <div class="grp">
-        <div class="fr"><label for="f-date">${ev.rec ? 'Empieza' : 'Fecha'}</label><input id="f-date" type="date" value="${ev.date || ''}"></div>
-        <div class="fr"><label for="f-start">Hora</label><input id="f-start" type="time" step="300" value="${ev.start || ''}"></div>
-        <div class="fr"><label for="f-dur">Duración</label><select id="f-dur">${durs.map(m => `<option value="${m}"${m === ev.dur ? ' selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></div>
-        <div class="fr" id="r-win"><label for="f-win">Franja</label><select id="f-win">${[['', 'Cualquiera'], ['m', 'Mañana'], ['t', 'Tarde'], ['n', 'Noche']].map(([v, l]) => `<option value="${v}"${(ev.win || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div class="fr"><label for="f-dl">Fecha límite</label><input id="f-dl" type="date" value="${ev.deadline || ''}"></div>
-        <div class="fr"><label for="f-rec">Repetir</label><select id="f-rec">
-          ${[['none', 'Nunca'], ['daily', 'Cada día'], ['weekdays', 'Entre semana'], ['weekend', 'Fines de semana'], ['weekly', 'Cada semana']].map(([v, l]) => `<option value="${v}"${recKey === v ? ' selected' : ''}>${l}</option>`).join('')}
-          ${recKey === 'custom' ? `<option value="custom" selected>${esc(recText(ev.rec))}</option>` : ''}</select></div>
-      </div>
-      <p class="gf">${o && o.auto && !done ? `Colocado automáticamente: ${esc(relDay(o.d).toLowerCase())}, ${toHM(o.s)}. ` : ''}Sin hora, Semana busca el primer hueco libre dentro de tu jornada (y antes de la fecha límite, si la hay).</p>
-      <div class="gh">Categoría</div>
-      <div class="grp"><div class="cats" role="group" aria-label="Categoría">${Object.keys(CATS).map(k => `<button type="button" class="cat" data-cat="${k}" aria-pressed="${ev.cat === k}"><span class="dot" style="--cat:${catVar(k)}"></span>${CATS[k].n}</button>`).join('')}</div></div>
-      <div class="grp"><div class="fr"><span class="k">Prioridad</span><div class="seg" role="group" aria-label="Prioridad"><button type="button" data-prio="0" aria-pressed="${!ev.prio}">Normal</button><button type="button" data-prio="2" aria-pressed="${!!ev.prio}">Alta</button></div></div></div>
-      <div class="grp">
-        <button type="button" class="fr act" data-x="done">${done ? 'Marcar como pendiente' : 'Marcar como hecho'}</button>
-        ${ev.rec ? `<button type="button" class="fr act red" data-x="skip">Quitar solo el ${esc(relDay(d).toLowerCase())}</button>` : ''}
-        <button type="button" class="fr act red" data-x="del">${ev.rec ? 'Eliminar todas las repeticiones' : 'Eliminar evento'}</button>
-      </div>
-    </div>`, 'Editar evento');
-  let cat = ev.cat, prio = ev.prio;
-  const syncWin = () => { $('#r-win', sh).hidden = !!$('#f-start', sh).value; };
-  syncWin(); $('#f-start', sh).addEventListener('input', syncWin);
-  sh.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { cat = b.dataset.cat; sh.querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
-  sh.querySelectorAll('[data-prio]').forEach(b => b.onclick = () => { prio = +b.dataset.prio; sh.querySelectorAll('[data-prio]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
-  sh.onclick = e => {
-    const b = e.target.closest('[data-x]'); if (!b) return;
-    const x = b.dataset.x;
-    if (x === 'cancel') return closeSheet();
-    if (x === 'done') { closeSheet(); toggle(id, d); return; }
-    if (x === 'skip') { snap(); ev.skip = ev.skip || {}; ev.skip[d] = true; persist(); closeSheet(); render(); toast(`Quitado del ${relDay(d).toLowerCase()}`, true); return; }
-    if (x === 'del') { snap(); S.events = S.events.filter(e2 => e2.id !== id); persist(); closeSheet(); render(); toast('Evento eliminado', true); return; }
-    if (x === 'save') {
-      const title = $('#f-title', sh).value.trim();
-      if (!title) { $('#f-title', sh).focus(); $('#f-title', sh).placeholder = 'Escribe un título'; return; }
-      snap();
-      const rk = $('#f-rec', sh).value, date = $('#f-date', sh).value || null;
-      ev.title = title; ev.notes = $('#f-notes', sh).value.trim();
-      ev.start = $('#f-start', sh).value || null; ev.dur = +$('#f-dur', sh).value || 60;
-      ev.win = ev.start ? null : ($('#f-win', sh).value || null);
-      ev.deadline = $('#f-dl', sh).value || null; ev.cat = cat; ev.prio = prio;
-      const base = date || d || todayStr();
-      ev.rec = rk === 'none' ? null : rk === 'daily' ? { days: [0, 1, 2, 3, 4, 5, 6] } : rk === 'weekdays' ? { days: [0, 1, 2, 3, 4] } : rk === 'weekend' ? { days: [5, 6] } : rk === 'weekly' ? { days: [wd(base)] } : ev.rec;
-      ev.date = ev.rec ? (date || todayStr()) : date;
-      if (!ev.date) ev.after = ev.after && ev.after >= todayStr() ? ev.after : null; else ev.after = null;
-      if (ev.done && !ev.rec) ev.frozen = { date: ev.date || (ev.frozen && ev.frozen.date) || d, start: ev.start || (ev.frozen && ev.frozen.start) || null };
-      delete ev.ex;
-      persist(); closeSheet(); render(); toast('Guardado · ' + placeText(ev), true);
-    }
-  };
-  setTimeout(() => { if (!ev.title) $('#f-title', sh).focus(); }, 60);
-}
-
 /* Revisión diaria */
 function greeting() { const h = new Date().getHours(); return h < 6 ? 'Buenas noches' : h < 13 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches'; }
 function openCheckin() {
@@ -876,7 +999,7 @@ function openCheckin() {
       <div class="gh">¿Qué tienes hoy o esta semana?</div>
       <form class="field flat" id="ci-f"><input id="ci-i" type="text" enterkeyhint="send" placeholder="Una cosa por línea y pulsa Intro" aria-label="Añadir evento"><button class="go" id="ci-go" type="submit" aria-label="Añadir" disabled><svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg></button></form>
       <div class="chips ci-chips" id="ci-chips"></div>
-      <p class="hint">Escribe como hablas: <i>Dentista jueves a las 10</i> · <i>Entregar práctica antes del viernes 2h</i> · <i>Gimnasio los lunes y miércoles a las 19</i> · <i>Llamar al banco 15 min</i>. Lo que no tenga hora irá al primer hueco libre.</p>
+      <p class="hint">Escribe como hablas: <i>Dentista jueves a las 10</i> · <i>Entregar práctica antes del viernes 2h</i> · <i>Gimnasio los lunes y miércoles a las 19</i> · <i>Llamar al banco 15 min</i> · <i>Compra: pan, leche y café</i>. Lo que no tenga hora irá al primer hueco libre y lo largo se reparte en bloques.</p>
       <div id="ci-add"></div>
       <div id="ci-day"></div>
       <button type="button" class="primary" data-x="close">Organizar mi día</button>
@@ -890,7 +1013,7 @@ function openCheckin() {
   };
   const drawDay = () => {
     const D = UI.P[t] || { items: [], loose: [] };
-    const rows = [...D.items, ...D.loose].map(it => `<div class="mrow" style="--cat:${catVar(it.ev.cat)}"><div class="tm${it.s == null ? ' none' : ''}">${it.s != null ? toHM(it.s) : '—'}</div><div><div class="ti${isDone(it.ev, t) ? ' added' : ''}">${it.ev.prio ? '<span class="prio">!</span>' : ''}${esc(it.ev.title)}</div><div class="sub"><span class="dot"></span>${subBits(it, t, true)}</div></div></div>`).join('');
+    const rows = [...D.items, ...D.loose].map(it => `<div class="mrow" style="--cat:${catVar(it.ev.cat)}"><div class="tm${it.s == null ? ' none' : ''}">${it.s != null ? toHM(it.s) : '—'}</div><div><div class="ti${itemDone(it) ? ' dn' : ''}">${it.ev.prio ? '<span class="prio">!</span>' : ''}${esc(it.ev.title)}</div><div class="sub"><span class="dot"></span>${subBits(it, t, true)}</div></div></div>`).join('');
     $('#ci-day', sh).innerHTML = `<div class="gh">Tu día</div><div class="grp">${rows || '<div class="mrow"><div class="tm none">—</div><div class="ti">Nada por ahora. Día libre.</div></div>'}</div>`;
   };
   const drawAdded = () => {
@@ -917,6 +1040,290 @@ function openCheckin() {
     persist(); render(); drawPend(); drawDay();
   };
 }
+
+/* Detalle de evento */
+const DURS = [15, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300, 360, 480];
+const SPLITS = [['', 'Automático'], ['0', 'No dividir'], ['45', 'Bloques de 45 min'], ['60', 'Bloques de 1 h'], ['90', 'Bloques de 1 h 30 min'], ['120', 'Bloques de 2 h'], ['180', 'Bloques de 3 h']];
+function openEdit(id, d, k) {
+  const ev = byId(id); if (!ev) return;
+  const o = findOcc(id, d, k), done = o ? itemDone(o) : isDone(ev, d), isPart = !!(o && o.part && o.part.n > 1);
+  const recKey = !ev.rec ? 'none' : (() => { const x = [...ev.rec.days].sort().join(''); return x === '0123456' ? 'daily' : x === '01234' ? 'weekdays' : x === '56' ? 'weekend' : (ev.rec.days.length === 1 ? 'weekly' : 'custom'); })();
+  const durs = DURS.includes(ev.dur) ? DURS : [...DURS, ev.dur].sort((a, b) => a - b);
+  const sp = ev.split == null ? '' : String(ev.split);
+  const spOpts = SPLITS.some(x => x[0] === sp) ? SPLITS : SPLITS.concat([[sp, `Bloques de ${fmtDur(+sp)}`]]);
+  let subs = (ev.subs || []).map(s => ({ id: s.id, t: s.t, done: subDone(ev, s, d) }));
+  const prog = (ev.doneParts || []).length ? `Hecho ${fmtDur(doneMin(ev))} de ${fmtDur(ev.dur)}. ` : '';
+  const opt = (list, cur) => list.map(([v, l]) => `<option value="${v}"${cur === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
+  const sh = openSheet(`
+    <div class="sh-nav"><button type="button" class="tb" data-x="cancel">Cancelar</button><span class="tl">${ev.rec ? 'Evento repetido' : 'Evento'}</span><button type="button" class="tb b" data-x="save">Guardar</button></div>
+    <div class="sh-body">
+      <div class="grp">
+        <div class="fr big"><input id="f-title" type="text" value="${esc(ev.title)}" placeholder="Título" aria-label="Título"></div>
+        <div class="fr"><textarea id="f-notes" placeholder="Notas" aria-label="Notas">${esc(ev.notes)}</textarea></div>
+      </div>
+      <div class="gh">Subtareas</div>
+      <div class="grp" id="f-subs"></div>
+      <div class="gh">Cuándo</div>
+      <div class="grp">
+        <div class="fr"><label for="f-date">${ev.rec ? 'Empieza' : 'Fecha'}</label><input id="f-date" type="date" value="${ev.date || ''}"></div>
+        <div class="fr"><label for="f-start">Hora</label><input id="f-start" type="time" step="300" value="${ev.start || ''}"></div>
+        <div class="fr"><label for="f-dur">Duración</label><select id="f-dur">${durs.map(m => `<option value="${m}"${m === ev.dur ? ' selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></div>
+        <div class="fr" id="r-split"><label for="f-split">Dividir</label><select id="f-split">${opt(spOpts, sp)}</select></div>
+        <div class="fr" id="r-win"><label for="f-win">Franja</label><select id="f-win">${opt([['', 'Cualquiera'], ['m', 'Mañana'], ['t', 'Tarde'], ['n', 'Noche']], ev.win || '')}</select></div>
+        <div class="fr"><label for="f-dl">Fecha límite</label><input id="f-dl" type="date" value="${ev.deadline || ''}"></div>
+        <div class="fr"><label for="f-rec">Repetir</label><select id="f-rec">${opt([['none', 'Nunca'], ['daily', 'Cada día'], ['weekdays', 'Entre semana'], ['weekend', 'Fines de semana'], ['weekly', 'Cada semana']], recKey)}${recKey === 'custom' ? `<option value="custom" selected>${esc(recText(ev.rec))}</option>` : ''}</select></div>
+      </div>
+      <p class="gf">${prog}${o && o.auto && !done ? `Colocado automáticamente: ${esc(relDay(o.d).toLowerCase())}, ${toHM(o.s)}. ` : ''}Sin hora, ASchelude busca el primer hueco libre de tu jornada. Si dura más de 2 h, lo reparte en bloques hasta la fecha límite.</p>
+      <div class="gh">Categoría</div>
+      <div class="grp"><div class="cats" role="group" aria-label="Categoría">${Object.keys(CATS).map(c => `<button type="button" class="cat" data-cat="${c}" aria-pressed="${ev.cat === c}"><span class="dot" style="--cat:${catVar(c)}"></span>${CATS[c].n}</button>`).join('')}</div></div>
+      <div class="grp"><div class="fr"><span class="k">Prioridad</span><div class="seg" role="group" aria-label="Prioridad"><button type="button" data-prio="0" aria-pressed="${!ev.prio}">Normal</button><button type="button" data-prio="2" aria-pressed="${!!ev.prio}">Alta</button></div></div></div>
+      <div class="grp">
+        ${isPart && !done ? '<button type="button" class="fr act" data-x="part">Marcar este bloque como hecho</button>' : ''}
+        <button type="button" class="fr act" data-x="done">${done ? 'Marcar como pendiente' : isPart ? 'Marcar toda la tarea como hecha' : 'Marcar como hecho'}</button>
+        ${ev.rec ? `<button type="button" class="fr act red" data-x="skip">Quitar solo el ${esc(relDay(d).toLowerCase())}</button>` : ''}
+        <button type="button" class="fr act red" data-x="del">${ev.rec ? 'Eliminar todas las repeticiones' : 'Eliminar evento'}</button>
+      </div>
+    </div>`, 'Editar evento');
+  let cat = ev.cat, prio = ev.prio;
+  const drawSubs = () => {
+    $('#f-subs', sh).innerHTML = subs.map(s => `<div class="fr st"><button type="button" class="stk" data-sk="${s.id}" aria-pressed="${s.done}" aria-label="${s.done ? 'Desmarcar' : 'Marcar'}: ${esc(s.t)}"></button><input id="f-s-${s.id}" type="text" data-si="${s.id}" value="${esc(s.t)}" aria-label="Subtarea"${s.done ? ' class="dn"' : ''}><button type="button" class="x" data-sx="${s.id}" aria-label="Quitar subtarea">✕</button></div>`).join('')
+      + '<div class="fr st"><span class="stk add" aria-hidden="true"></span><input id="f-newsub" type="text" enterkeyhint="done" placeholder="Añadir subtarea" aria-label="Añadir subtarea"></div>';
+  };
+  drawSubs();
+  const sync = () => { const st = !!$('#f-start', sh).value, rc = $('#f-rec', sh).value !== 'none'; $('#r-win', sh).hidden = st; $('#r-split', sh).hidden = st || rc; };
+  sync(); $('#f-start', sh).addEventListener('input', sync); $('#f-rec', sh).addEventListener('change', sync);
+  sh.oninput = e => { const i = e.target.dataset && e.target.dataset.si; if (i) { const s = subs.find(x => x.id === i); if (s) s.t = e.target.value; } };
+  sh.onkeydown = e => {
+    if (e.target.id !== 'f-newsub' || e.key !== 'Enter') return;
+    e.preventDefault(); const v = e.target.value.trim(); if (!v) return;
+    subs.push({ id: uid(), t: v, done: false }); drawSubs(); $('#f-newsub', sh).focus();
+  };
+  sh.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { cat = b.dataset.cat; sh.querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+  sh.querySelectorAll('[data-prio]').forEach(b => b.onclick = () => { prio = +b.dataset.prio; sh.querySelectorAll('[data-prio]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+  sh.onclick = e => {
+    const sk = e.target.closest('[data-sk]'), sx = e.target.closest('[data-sx]');
+    if (sk) { const s = subs.find(x => x.id === sk.dataset.sk); if (s) { s.done = !s.done; drawSubs(); } return; }
+    if (sx) { subs = subs.filter(x => x.id !== sx.dataset.sx); drawSubs(); return; }
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    const x = b.dataset.x;
+    if (x === 'cancel') return closeSheet();
+    if (x === 'part') { closeSheet(); toggle(id, d, k); return; }
+    if (x === 'done') { closeSheet(); if (done || !isPart) toggle(id, d, k); else { snap(); markDone(ev, d, k); persist(); render(); toast('Tarea completada', true); } return; }
+    if (x === 'skip') { snap(); ev.skip = ev.skip || {}; ev.skip[d] = true; persist(); closeSheet(); render(); toast(`Quitado del ${relDay(d).toLowerCase()}`, true); return; }
+    if (x === 'del') { snap(); S.events = S.events.filter(e2 => e2.id !== id); persist(); closeSheet(); render(); toast('Evento eliminado', true); return; }
+    if (x === 'save') {
+      const title = $('#f-title', sh).value.trim();
+      if (!title) { $('#f-title', sh).focus(); $('#f-title', sh).placeholder = 'Escribe un título'; return; }
+      snap();
+      const rk = $('#f-rec', sh).value, date = $('#f-date', sh).value || null;
+      ev.title = title; ev.notes = $('#f-notes', sh).value.trim();
+      ev.start = $('#f-start', sh).value || null; ev.dur = +$('#f-dur', sh).value || 60;
+      ev.win = ev.start ? null : ($('#f-win', sh).value || null);
+      ev.deadline = $('#f-dl', sh).value || null; ev.cat = cat; ev.prio = prio;
+      const base = date || d || todayStr();
+      ev.rec = rk === 'none' ? null : rk === 'daily' ? { days: [0, 1, 2, 3, 4, 5, 6] } : rk === 'weekdays' ? { days: [0, 1, 2, 3, 4] } : rk === 'weekend' ? { days: [5, 6] } : rk === 'weekly' ? { days: [wd(base)] } : ev.rec;
+      ev.date = ev.rec ? (date || todayStr()) : date;
+      if (!ev.start && !ev.rec) { const v = $('#f-split', sh).value; ev.split = v === '' ? null : +v; }
+      if (!ev.date) ev.after = ev.after && ev.after >= todayStr() ? ev.after : null; else ev.after = null;
+      const nv = $('#f-newsub', sh).value.trim(); if (nv) subs.push({ id: uid(), t: nv, done: false });
+      const clean = subs.map(s => ({ id: s.id, t: s.t.trim(), done: s.done })).filter(s => s.t);
+      if (ev.rec) { ev.subs = clean.map(s => ({ id: s.id, t: s.t, done: false })); ev.subDone = ev.subDone || {}; ev.subDone[d] = Object.fromEntries(clean.filter(s => s.done).map(s => [s.id, true])); }
+      else ev.subs = clean;
+      if (!ev.rec && !ev.done && doneMin(ev) > 0 && remaining(ev) <= 0) ev.done = true;
+      if (ev.done && !ev.rec && !(ev.doneParts || []).length) ev.frozen = { date: ev.date || (ev.frozen && ev.frozen.date) || d, start: ev.start || (ev.frozen && ev.frozen.start) || null };
+      delete ev.ex;
+      persist(); closeSheet(); render(); toast('Guardado · ' + placeText(ev), true);
+    }
+  };
+  setTimeout(() => { if (!ev.title) $('#f-title', sh).focus(); }, 60);
+}
+
+/* ---------- Reorganizar el día ---------- */
+function reorgCandidates() {
+  const t = todayStr(), nm = nowMin(), D = UI.P && UI.P[t], m = new Map();
+  for (const ev of S.events) {
+    if (ev.rec || ev.done) continue;
+    if (ev.date === t && ev.start && toMin(ev.start) + ev.dur <= nm) m.set(ev.id, 'passed');
+    else if (ev.date && ev.date < t) m.set(ev.id, 'overdue');
+  }
+  if (D) for (const it of D.loose) { const ev = it.ev; if (!ev.rec && !ev.done && ev.date === t && !ev.start && !m.has(ev.id)) m.set(ev.id, 'full'); }
+  return [...m].map(([id, kind]) => ({ ev: byId(id), kind })).filter(x => x.ev);
+}
+/* Lo que se pasó sin marcar o no cabe vuelve a buscar hueco a partir de ahora; lo que no cabe hoy, desde mañana. */
+function reorganize() {
+  const c = reorgCandidates(), t = todayStr();
+  if (!c.length) { toast('Tu día ya está en orden'); return; }
+  snap();
+  for (const { ev, kind } of c) { const sp = splits(ev); ev.start = null; ev.date = null; ev.after = kind === 'full' && !sp ? addDays(t, 1) : t; }
+  persist(); render();
+  toast(c.length === 1 ? 'Recolocado 1 evento' : `Recolocados ${c.length} eventos`, true);
+}
+
+/* ---------- Estadísticas ---------- */
+function catBar(byCat, key) {
+  const ks = Object.keys(CATS).filter(k => byCat[k] && byCat[k][key] > 0);
+  if (!ks.length) return '';
+  return `<div class="cbar" role="img" aria-label="${esc(ks.map(k => `${CATS[k].n} ${fmtDur(byCat[k][key])}`).join(', '))}">${ks.map(k => `<i style="--cat:${catVar(k)};flex:${byCat[k][key]} 1 0"></i>`).join('')}</div>
+    <div class="legend">${ks.map(k => `<span><i class="dot" style="--cat:${catVar(k)}"></i>${CATS[k].n} <b>${fmtDur(byCat[k][key])}</b></span>`).join('')}</div>`;
+}
+function weekSumHTML(P, w) {
+  const st = weekStats(P, w); if (!st.n) return '';
+  const cur = w === weekStartOf(todayStr());
+  return `<section class="wsum" aria-label="Resumen de la semana">
+    <div class="wsum-h"><h2 class="label">${cur ? 'Esta semana' : `Semana ${isoWeek(w)}`}</h2><button type="button" class="tb sm" data-act="close" data-w="${w}">Cierre de semana</button></div>
+    <div class="wsum-c"><p class="wsum-n">${fmtDur(st.pmin)} <span>planificadas · ${st.pct} % hecho</span></p>${catBar(st.byCat, 'plan')}</div>
+  </section>`;
+}
+
+/* ---------- Cierre de semana ---------- */
+function closeDue() {
+  const t = todayStr(), w = weekStartOf(t), pw = addDays(w, -7);
+  if (wd(t) === 6 && new Date().getHours() >= 17 && !S.closes[w]) return w;
+  if (wd(t) <= 2 && !S.closes[pw] && weekStartOf(S.since) <= pw) return pw;
+  return null;
+}
+const mon3 = x => MESES[x.getMonth()].slice(0, 3);
+function openClose(w, after) {
+  const t = todayStr(), e = addDays(w, 6), P = plan(w, e), st = weekStats(P, w), nm = nowMin(), next = addDays(w, 7);
+  const a = pd(w), b = pd(e);
+  const range = a.getMonth() === b.getMonth() ? `${a.getDate()}–${b.getDate()} ${mon3(b)}` : `${a.getDate()} ${mon3(a)} – ${b.getDate()} ${mon3(b)}`;
+  const seen = new Set(); let left = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(w, i), D = P[d]; if (!D) continue;
+    for (const it of D.items.concat(D.loose)) {
+      const ev = it.ev; if (ev.rec || itemDone(it) || seen.has(ev.id)) continue;
+      if (e < t || d < t || it.s == null || (d === t && (it.s + it.dur <= nm || (it.auto && wd(t) === 6)))) { seen.add(ev.id); left.push(it); }
+    }
+  }
+  const did = st.groups.filter(g => g.done > 0);
+  const val = g => (g.ev.rec ? `${g.done} de ${g.n}` : fmtDur(g.min));
+  const sh = openSheet(`
+    <div class="sh-nav"><span></span><span class="tl">Cierre de semana</span><button type="button" class="tb b" data-x="close">Listo</button></div>
+    <div class="sh-body">
+      <p class="eyebrow cl-e">Semana ${isoWeek(w)} · ${range}</p>
+      <p class="hero-n">${st.pct}<small>%</small></p>
+      <p class="hero-s">completado · ${st.nDone} de ${st.n} · ${fmtDur(st.dmin)} hechas</p>
+      ${st.dmin ? `<div class="grp pad">${catBar(st.byCat, 'done')}</div>` : ''}
+      ${did.length ? `<div class="gh">Lo que hiciste</div><div class="grp">${did.map(g => `<div class="fr"><span class="k2"><i class="dot" style="--cat:${catVar(g.ev.cat)}"></i><span class="tt">${esc(g.ev.title)}</span></span><span class="v">${val(g)}</span></div>`).join('')}</div>` : ''}
+      <div id="cl-p"></div>
+      <button type="button" class="primary" data-x="move"></button>
+    </div>`, 'Cierre de semana', () => { S.closes[w] = true; persist(); if (after) setTimeout(after, 420); });
+  const draw = () => {
+    $('#cl-p', sh).innerHTML = left.length ? `<div class="gh">Pasa a la semana siguiente</div><div class="grp">${left.map(it => `
+      <div class="pr"><div><div class="ti">${it.ev.prio ? '<span class="prio">!</span>' : ''}${esc(it.ev.title)}</div><div class="sub">${fmtDur(splits(it.ev) ? remaining(it.ev) : it.ev.dur)}${it.ev.deadline ? ' · Límite ' + esc(relDay(it.ev.deadline).toLowerCase()) : ''}</div></div>
+      <div class="pa"><button type="button" class="mini" data-cp="done" data-id="${it.ev.id}">Lo hice</button><button type="button" class="mini" data-cp="drop" data-id="${it.ev.id}">Quitar</button></div></div>`).join('')}</div>` : '';
+    $('[data-x="move"]', sh).textContent = left.length ? `Pasar ${left.length} a la semana siguiente` : 'Cerrar semana';
+  };
+  draw();
+  sh.onclick = ev0 => {
+    const b = ev0.target.closest('[data-x],[data-cp]'); if (!b) return;
+    if (b.dataset.x === 'close') return closeSheet();
+    if (b.dataset.x === 'move') {
+      if (left.length) { snap(); left.forEach(it => { it.ev.date = null; it.ev.start = null; it.ev.after = maxS(next, t); }); persist(); render(); toast(`${left.length} pasan a la semana ${isoWeek(maxS(next, t))}`, true); }
+      return closeSheet();
+    }
+    const it = left.find(x => x.ev.id === b.dataset.id); if (!it) return;
+    snap();
+    if (b.dataset.cp === 'done') markDone(it.ev, it.d, it.part ? it.part.k : null);
+    else S.events = S.events.filter(x => x.id !== it.ev.id);
+    left = left.filter(x => x !== it); persist(); render(); draw();
+  };
+}
+
+/* ---------- Arrastrar para mover ---------- */
+/* Ratón: arrastra una tarjeta a otra columna. Táctil: mantén pulsado un evento y suéltalo sobre un día de la tira. */
+const DG = { st: null, block: false };
+function dragBegin(src, x, y, type) {
+  DG.st = { src, id: src.dataset.id, d: src.dataset.d, k: src.dataset.k, x, y, type, on: false, to: null, tgEl: null, flip: 0 };
+}
+function dragStart() {
+  const st = DG.st; if (!st || st.on) return;
+  const ev = byId(st.id); if (!ev) { DG.st = null; return; }
+  st.on = true; st.src.classList.add('lifted');
+  const g = document.createElement('div');
+  g.className = 'ghost'; g.style.setProperty('--cat', catVar(ev.cat));
+  g.innerHTML = `<i class="dot"></i><span>${esc(ev.title)}</span>`;
+  document.body.appendChild(g); st.g = g;
+  document.body.classList.add('dragging');
+  dragPos(st.x, st.y);
+  try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {}
+  toast(wide() ? 'Suelta sobre otro día' : 'Suelta sobre un día de arriba', false, true);
+}
+function dragPos(x, y) {
+  const st = DG.st; if (!st || !st.g) return;
+  st.g.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, ${st.type === 'mouse' ? '-50%' : '-150%'})`;
+  const el = document.elementFromPoint(x, y);
+  const tg = el && el.closest('[data-drop]'), fl = el && el.closest('[data-flip]');
+  const to = tg ? tg.dataset.drop : null;
+  if (to !== st.to || tg !== st.tgEl) { if (st.tgEl) st.tgEl.classList.remove('drop-on'); st.to = to; st.tgEl = tg; if (tg) tg.classList.add('drop-on'); }
+  const f = fl ? +fl.dataset.flip : 0;
+  if (f !== st.flip) {
+    clearTimeout(st.ft); st.flip = f;
+    if (f) st.ft = setTimeout(() => { goWeek(f); st.flip = 0; st.to = null; st.tgEl = null; }, 650);
+  }
+}
+function dragEnd(drop) {
+  const st = DG.st; DG.st = null; if (!st) return;
+  clearTimeout(st.timer); clearTimeout(st.ft);
+  if (!st.on) return;
+  DG.block = true; setTimeout(() => { DG.block = false; }, 450);
+  st.src.classList.remove('lifted'); if (st.g) st.g.remove(); if (st.tgEl) st.tgEl.classList.remove('drop-on');
+  document.body.classList.remove('dragging'); hideToast();
+  if (drop && st.to) moveTo(st.id, st.d, st.k, st.to);
+}
+function moveTo(id, from, k, to) {
+  const ev = byId(id); if (!ev || from === to) return;
+  const it = findOcc(id, from, k); snap();
+  let tgt = ev;
+  const copy = o => blank(Object.assign({ title: ev.title, notes: ev.notes, cat: ev.cat, prio: ev.prio, win: ev.win, of: ev.id }, o));
+  if (ev.rec) {
+    ev.skip = ev.skip || {}; ev.skip[from] = true;
+    tgt = copy({ dur: ev.dur, date: to, start: ev.start, subs: (ev.subs || []).map(s => ({ id: uid(), t: s.t, done: false })) });
+    S.events.push(tgt);
+  } else if (it && it.part && it.pdone) {
+    ev.doneParts[it.pi].d = to;
+  } else if (it && it.part && occsOf(id).filter(o => o.part && !o.pdone).length > 1) {
+    if (ev.split == null) ev.split = it.dur;
+    ev.dur -= it.dur;
+    tgt = copy({ dur: it.dur, date: to, deadline: ev.deadline, split: 0 });
+    S.events.push(tgt);
+  } else if (ev.done) {
+    ev.frozen = Object.assign({ start: ev.start }, ev.frozen, { date: to }); ev.date = to;
+  } else { ev.date = to; ev.after = null; }
+  persist(); render();
+  toast('Movido · ' + placeText(tgt), true);
+}
+document.addEventListener('pointerdown', e => {
+  DG.block = false;
+  if (e.pointerType === 'touch' || e.button !== 0) return;
+  const src = e.target.closest('[data-drag]');
+  if (src && !e.target.closest('.ck,.sb,#sheet')) dragBegin(src, e.clientX, e.clientY, 'mouse');
+});
+document.addEventListener('pointermove', e => {
+  const st = DG.st; if (!st || st.type !== 'mouse') return;
+  if (!st.on) { if (Math.hypot(e.clientX - st.x, e.clientY - st.y) < 6) return; dragStart(); }
+  e.preventDefault(); dragPos(e.clientX, e.clientY);
+});
+document.addEventListener('pointerup', () => { if (DG.st && DG.st.type === 'mouse') dragEnd(true); });
+document.addEventListener('pointercancel', () => { if (DG.st && DG.st.type === 'mouse') dragEnd(false); });
+document.addEventListener('touchstart', e => {
+  DG.block = false;
+  if (e.touches.length !== 1) { dragEnd(false); return; }
+  const src = e.target.closest('[data-drag]'); if (!src || e.target.closest('.ck,.sb,#sheet')) return;
+  const p = e.touches[0]; dragBegin(src, p.clientX, p.clientY, 'touch');
+  DG.st.timer = setTimeout(dragStart, 420);
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  const st = DG.st; if (!st || st.type !== 'touch') return;
+  const p = e.touches[0];
+  if (!st.on) { if (Math.hypot(p.clientX - st.x, p.clientY - st.y) > 10) { clearTimeout(st.timer); DG.st = null; } return; }
+  e.preventDefault(); dragPos(p.clientX, p.clientY);
+}, { passive: false });
+document.addEventListener('touchend', () => { if (DG.st && DG.st.type === 'touch') dragEnd(true); });
+document.addEventListener('touchcancel', () => { if (DG.st && DG.st.type === 'touch') dragEnd(false); });
+document.addEventListener('contextmenu', e => { if (DG.st) e.preventDefault(); });
+document.addEventListener('click', e => { if (DG.block) { e.preventDefault(); e.stopPropagation(); DG.block = false; } }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && DG.st) dragEnd(false); });
 
 /* Ajustes */
 const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
@@ -947,6 +1354,7 @@ function openSettings() {
         ${hasEx ? '<button type="button" class="fr act red" data-x="ex">Borrar eventos de ejemplo</button>' : ''}
         <button type="button" class="fr act red" data-x="wipe">Borrar todo</button>
       </div>
+      <p class="gf ver">ASchelude · versión 2</p>
     </div>`, 'Ajustes');
   const msg = m => { $('#s-msg', sh).textContent = m; };
   const save = () => {
@@ -959,9 +1367,9 @@ function openSettings() {
     try {
       const d = JSON.parse(txt);
       if (!d || !Array.isArray(d.events)) throw 0;
-      snap(); S = { v: 1, settings: Object.assign({ dayStart: '08:00', dayEnd: '22:00', name: '' }, d.settings), checkins: d.checkins || {}, events: d.events.map(e => blank(e)) };
+      snap(); S = normalize(d);
       persist(); render(); closeSheet(); toast(`Importados ${S.events.length} eventos`, true);
-    } catch (e) { msg('Ese texto no es una copia de Semana. Copia de nuevo desde Ajustes en el otro dispositivo.'); }
+    } catch (e) { msg('Ese texto no es una copia de ASchelude. Copia de nuevo desde Ajustes en el otro dispositivo.'); }
   };
   $('#s-file', sh).addEventListener('change', e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
@@ -980,14 +1388,14 @@ function openSettings() {
     if (x === 'dl') {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-      a.download = `semana-${todayStr()}.json`; document.body.appendChild(a); a.click();
+      a.download = `aschelude-${todayStr()}.json`; document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
     if (x === 'paste') importData($('#s-paste', sh).value);
     if (x === 'ex') { snap(); S.events = S.events.filter(e2 => !e2.ex); persist(); render(); closeSheet(); toast('Ejemplos borrados', true); }
     if (x === 'wipe') {
       if (!wipeArmed) { wipeArmed = true; b.textContent = 'Toca otra vez para borrar todo'; return; }
-      snap(); S = { v: 1, settings: S.settings, checkins: {}, events: [] }; persist(); render(); closeSheet(); toast('Todo borrado', true);
+      snap(); S = normalize({ v: 2, settings: S.settings, events: [] }); persist(); render(); closeSheet(); toast('Todo borrado', true);
     }
   };
 }
@@ -996,15 +1404,36 @@ function openSettings() {
 function goWeek(n) { UI.week = addDays(UI.week, 7 * n); const t = todayStr(); UI.sel = UI.week === weekStartOf(t) ? t : UI.week; render(); }
 function goDay(n) { UI.sel = addDays(UI.sel, n); UI.week = weekStartOf(UI.sel); render(); }
 function goToday() { const t = todayStr(); UI.week = weekStartOf(t); UI.sel = t; render(); }
-function maybeCheckin() { if (!S.checkins[todayStr()] && $('#sheet').hidden) openCheckin(); }
+function maybeCheckin() {
+  if (!$('#sheet').hidden) return;
+  const w = closeDue(), ci = !S.checkins[todayStr()];
+  if (w) openClose(w, ci ? openCheckin : null); else if (ci) openCheckin();
+}
+/* Enlaces para Atajos de iPhone: ?add=texto (una o varias líneas) y ?revision */
+function fromUrl() {
+  let q; try { q = new URLSearchParams(location.search); } catch (e) { return false; }
+  const add = q.get('add'), rev = q.has('revision');
+  if (!add && !rev) return false;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  if (add) {
+    snap();
+    const evs = add.split(/\n|;/).map(x => x.trim()).filter(Boolean).slice(0, 20).map(x => addFromText(x, null, true)).filter(Boolean);
+    if (evs.length) toast(evs.length === 1 ? 'Añadido · ' + placeText(evs[0]) : `Añadidos ${evs.length} eventos`, true);
+  }
+  if (rev) setTimeout(openCheckin, 300);
+  return true;
+}
 const typing = () => { const a = document.activeElement; return a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); };
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.closest('#sheet')) return;
-  const { act, id, d } = b.dataset;
+  const { act, id, d, k } = b.dataset;
   if (act === 'sel') { UI.sel = d; render(); }
-  else if (act === 'toggle') toggle(id, d);
-  else if (act === 'open') openEdit(id, d);
+  else if (act === 'toggle') toggle(id, d, k);
+  else if (act === 'open') openEdit(id, d, k);
+  else if (act === 'sub') toggleSub(id, b.dataset.sid, d, k);
+  else if (act === 'reorg') reorganize();
+  else if (act === 'close') openClose(b.dataset.w);
 });
 $('#prev').onclick = () => goWeek(-1);
 $('#next').onclick = () => goWeek(1);
@@ -1036,7 +1465,7 @@ document.addEventListener('keydown', e => {
 let sx = null, sy = 0;
 $('#agenda').addEventListener('touchstart', e => { const p = e.touches[0]; sx = p.clientX; sy = p.clientY; }, { passive: true });
 $('#agenda').addEventListener('touchend', e => {
-  if (sx == null) return; const p = e.changedTouches[0], dx = p.clientX - sx, dy = p.clientY - sy; sx = null;
+  if (sx == null) return; if (DG.st && DG.st.on) { sx = null; return; } const p = e.changedTouches[0], dx = p.clientX - sx, dy = p.clientY - sy; sx = null;
   if (Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.6) goDay(dx < 0 ? 1 : -1);
 }, { passive: true });
 
@@ -1050,7 +1479,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { ti
 window.matchMedia('(min-width: 960px)').addEventListener('change', render);
 
 render();
-setTimeout(maybeCheckin, 700);
+if (!fromUrl()) setTimeout(maybeCheckin, 700);
 
 </script>
 <script>if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
